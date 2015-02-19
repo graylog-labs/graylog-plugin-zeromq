@@ -1,4 +1,4 @@
-# Graylog ZeroMQPlugin Plugin
+# Graylog ZeroMQ Plugin
 
 Welcome to your new Graylog plugin!
 

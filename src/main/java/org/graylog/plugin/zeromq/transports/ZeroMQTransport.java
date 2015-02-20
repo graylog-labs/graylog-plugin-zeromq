@@ -1,5 +1,6 @@
 package org.graylog.plugin.zeromq.transports;
 
+import com.codahale.metrics.Gauge;
 import com.codahale.metrics.MetricSet;
 import com.google.common.util.concurrent.AbstractExecutionThreadService;
 import com.google.inject.assistedinject.Assisted;
@@ -22,6 +23,14 @@ import org.slf4j.LoggerFactory;
 import org.zeromq.ZMQ;
 import org.zeromq.ZMQException;
 
+import javax.inject.Named;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static org.graylog.plugin.zeromq.MetricUtils.constantGauge;
+
 public class ZeroMQTransport implements Transport {
     private static final Logger log = LoggerFactory.getLogger(ZeroMQTransport.class);
 
@@ -30,15 +39,61 @@ public class ZeroMQTransport implements Transport {
     public static final String ZMQ_SHOULD_BIND = "zmq_bind";
     private final Configuration configuration;
     private final LocalMetricRegistry localRegistry;
+    private final ScheduledExecutorService scheduledExecutorService;
     private ZMQ.Context context;
     private ZMQ.Socket socket;
     private AbstractExecutionThreadService pullDeviceService;
+    private AbstractExecutionThreadService connectionMonitorService;
+
+    private final AtomicLong openConnections = new AtomicLong(0);
+    private final AtomicLong totalConnections = new AtomicLong(0);
+    private final AtomicLong readBytesTotal = new AtomicLong(0);
+    private final AtomicLong readBytesLastSec = new AtomicLong(0);
+    private ScheduledFuture<?> sampler;
+    private ZMQ.Socket monitor;
 
     @AssistedInject
-    public ZeroMQTransport(@Assisted Configuration configuration, LocalMetricRegistry localRegistry) {
+    public ZeroMQTransport(@Assisted Configuration configuration,
+                           LocalMetricRegistry localRegistry,
+                           @Named("daemonScheduler") ScheduledExecutorService scheduledExecutorService) {
         this.configuration = configuration;
         this.localRegistry = localRegistry;
+        this.scheduledExecutorService = scheduledExecutorService;
+
+        this.localRegistry.register("open_connections", new Gauge<Long>() {
+
+            @Override
+            public Long getValue() {
+                return openConnections.get();
+            }
+        });
+        this.localRegistry.register("total_connections", new Gauge<Long>() {
+
+            @Override
+            public Long getValue() {
+                return totalConnections.get();
+            }
+        });
+
+        this.localRegistry.register("read_bytes_total", new Gauge<Long>() {
+
+            @Override
+            public Long getValue() {
+                return readBytesTotal.get();
+            }
+        });
+        this.localRegistry.register("written_bytes_total", constantGauge(0L));
+
+        this.localRegistry.register("read_bytes_1sec", new Gauge<Long>() {
+
+            @Override
+            public Long getValue() {
+                return readBytesLastSec.get();
+            }
+        });
+        this.localRegistry.register("written_bytes_1sec", constantGauge(0L));
     }
+
 
     @Override
     public void setMessageAggregator(CodecAggregator ignored) {
@@ -54,7 +109,13 @@ public class ZeroMQTransport implements Transport {
 
         context = ZMQ.context(Math.max(1, ioThreads));
         socket = context.socket(ZMQ.PULL);
+        socket.setLinger(1000); // wait up to 1s for outgoing messages to be processed when closing socket
         socket.setReceiveTimeOut(500); // wake up at least every 500ms
+        monitor = context.socket(ZMQ.PAIR);
+        monitor.setReceiveTimeOut(500); // wake up at least every 500ms to allow shutdown
+
+        socket.monitor("inproc://zeromq_pull_transport_monitor", ZMQ.EVENT_ALL);
+        monitor.connect("inproc://zeromq_pull_transport_monitor");
         try {
             if (shouldBind) {
                 socket.bind(address);
@@ -66,6 +127,19 @@ public class ZeroMQTransport implements Transport {
             throw new MisfireException("Could not " + (shouldBind ? "bind" : "connect") + " PULL device to " + address, e);
         }
 
+        sampler = scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
+            private long lastValue = 0L;
+
+            @Override
+            public void run() {
+                // we don't care if there's jitter
+                final long current = readBytesTotal.get();
+                final long bytes = current - lastValue;
+                lastValue = current;
+                readBytesLastSec.set(bytes);
+            }
+        }, 0, 1, TimeUnit.SECONDS);
+
         pullDeviceService = new AbstractExecutionThreadService() {
             @Override
             protected void run() throws Exception {
@@ -73,22 +147,47 @@ public class ZeroMQTransport implements Transport {
                     // this wakes up periodically if there's no traffic to check for shutdown
                     final byte[] bytes = socket.recv();
                     if (bytes != null) {
+                        readBytesTotal.addAndGet(bytes.length);
                         input.processRawMessage(new RawMessage(bytes));
                     }
                 }
             }
         };
+        connectionMonitorService = new AbstractExecutionThreadService() {
+            @Override
+            protected void run() throws Exception {
+                while (isRunning()) {
+                    final ZMQ.Event event = ZMQ.Event.recv(monitor);
+                    if (event == null) {
+                        continue;
+                    }
+                    switch (event.getEvent()) {
+                        case ZMQ.EVENT_ACCEPTED:
+                            openConnections.incrementAndGet();
+                            totalConnections.incrementAndGet();
+                            break;
+                        case ZMQ.EVENT_CLOSED:
+                        case ZMQ.EVENT_DISCONNECTED:
+                            openConnections.decrementAndGet();
+                            break;
+                    }
+                }
+            }
+        };
+        connectionMonitorService.startAsync().awaitRunning();
         pullDeviceService.startAsync().awaitRunning();
     }
 
     @Override
     public void stop() {
         final String address = configuration.getString(ZMQ_ADDRESS);
-        log.debug("Stopping ZeroMQ reader thread connected to {}", address);
+        log.info("Stopping ZeroMQ reader thread connected to {}", address);
         pullDeviceService.stopAsync().awaitTerminated();
+        connectionMonitorService.stopAsync().awaitTerminated();
 
-        log.debug("Closing ZeroMQ socket and context connected to {}", address);
+        log.info("Closing ZeroMQ socket and context connected to {}", address);
         socket.close();
+        monitor.close();
         context.close();
     }
 

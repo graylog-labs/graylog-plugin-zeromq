@@ -184,6 +184,7 @@ public class ZeroMQTransport implements Transport {
         log.info("Stopping ZeroMQ reader thread connected to {}", address);
         pullDeviceService.stopAsync().awaitTerminated();
         connectionMonitorService.stopAsync().awaitTerminated();
+        sampler.cancel(true);
 
         log.info("Closing ZeroMQ socket and context connected to {}", address);
         socket.close();

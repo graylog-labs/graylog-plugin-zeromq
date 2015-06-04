@@ -1,0 +1,25 @@
+language: java
+jdk:
+  - oraclejdk7
+  - oraclejdk8
+addons:
+  apt:
+    packages:
+      - rpm
+before_deploy:
+  - mvn jdeb:jdeb && export RELEASE_DEB_FILE=$(ls target/*.deb)
+  - mvn rpm:rpm && export RELEASE_RPM_FILE=$(ls target/rpm/graylog-zeromq-plugin/RPMS/noarch/graylog-zeromq-plugin-*.rpm)
+  - export RELEASE_PKG_FILE=$(ls target/graylog-zeromq-plugin-*.jar)
+  - echo "Deploying release to GitHub releases"
+deploy:
+  provider: releases
+  api_key:
+    secure: "ReibrB/5rzx7NoqYmDbfCQWJj7B1ryXDeIRhinSrKwO0xxaedO9T5iUgl9fyF5ZO8LohCFBED5ecnCVAr1pJiW+0HE0lt+RMW7nqpRg74x9PjbEpxpK9wJpyFaXLAbzjmBI1svAripijQNeiYOffcX+VNHmT1isjixuz5rpS1zU="
+  file: 
+    - "${RELEASE_PKG_FILE}"
+    - "${RELEASE_DEB_FILE}"
+    - "${RELEASE_RPM_FILE}"
+  skip_cleanup: true
+  on:
+    tags: true
+    jdk: oraclejdk7

@@ -26,12 +26,12 @@ public class ZeroMQPluginMetaData implements PluginMetaData {
 
     @Override
     public URI getURL() {
-        return URI.create("https://www.graylog2.org/");
+        return URI.create("https://www.graylog.org/");
     }
 
     @Override
     public Version getVersion() {
-        return new Version(1, 0, 0);
+        return new Version(1, 1, 1);
     }
 
     @Override
@@ -41,7 +41,7 @@ public class ZeroMQPluginMetaData implements PluginMetaData {
 
     @Override
     public Version getRequiredVersion() {
-        return new Version(1, 0, 0);
+        return new Version(1, 1, 0);
     }
 
     @Override

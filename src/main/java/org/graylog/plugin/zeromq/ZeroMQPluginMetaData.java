@@ -31,7 +31,7 @@ public class ZeroMQPluginMetaData implements PluginMetaData {
 
     @Override
     public Version getVersion() {
-        return new Version(1, 1, 1);
+        return new Version(1, 1, 2);
     }
 
     @Override

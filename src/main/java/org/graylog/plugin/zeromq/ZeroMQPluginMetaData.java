@@ -16,7 +16,7 @@ public class ZeroMQPluginMetaData implements PluginMetaData {
 
     @Override
     public String getName() {
-        return "ZeroMQPlugin";
+        return "ZeroMQ Plugin";
     }
 
     @Override
@@ -41,7 +41,7 @@ public class ZeroMQPluginMetaData implements PluginMetaData {
 
     @Override
     public Version getRequiredVersion() {
-        return new Version(1, 1, 0);
+        return new Version(2, 0, 0);
     }
 
     @Override

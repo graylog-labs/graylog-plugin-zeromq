@@ -1,7 +1,9 @@
 ZeroMQ Plugin for Graylog
 =========================
 
-[![Build Status](https://travis-ci.org/Graylog2/graylog-plugin-zeromq.svg)](https://travis-ci.org/Graylog2/graylog-plugin-zeromq)
+[![Github Downloads](https://img.shields.io/github/downloads/graylog-labs/graylog-plugin-zeromq/total.svg)](https://github.com/graylog-labs/graylog-plugin-zeromq/releases)
+[![GitHub Release](https://img.shields.io/github/release/graylog-labs/graylog-plugin-zeromq.svg)](https://github.com/graylog-labs/graylog-plugin-zeromq/releases)
+[![Build Status](https://travis-ci.org/graylog-labs/graylog-plugin-zeromq.svg)](https://travis-ci.org/graylog-labs/graylog-plugin-zeromq)
 
 This plugin includes a [ZeroMQ](http://zeromq.org/) input for Graylog.
 
@@ -9,7 +11,7 @@ This plugin includes a [ZeroMQ](http://zeromq.org/) input for Graylog.
 
 ## Installation
 
-[Download the plugin](https://github.com/Graylog2/graylog-plugin-zeromq/releases)
+[Download the plugin](https://github.com/graylog-labs/graylog-plugin-zeromq/releases)
 and place the `.jar` file in your Graylog plugin directory. The plugin directory
 is the `plugins/` folder relative from your `graylog-server` directory by default
 and can be configured in your `graylog.conf` file.
